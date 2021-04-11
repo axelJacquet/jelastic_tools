@@ -1,0 +1,88 @@
+type: update
+name: test
+onInstall:
+- script: |
+    //@auth
+    import com.hivext.api.core.utils.Transport;
+    import org.json.JSONObject;
+    var resp = api.administration.cluster.GetExtIpPoolInfo("cluster", session, {
+        isBusy: true,
+        ipType: "IPV4"
+    });
+    
+    // detect stopped environments with public IPv4
+    if (resp.result != 0) return resp;
+    var ips = resp.array;
+    var addresses = [];
+    for (var i = 0, n = ips.length; i < n; i++) {
+        addresses.push(ips[i].ipAddress);
+    }
+    resp = api.administration.cluster.GetDomainByIp("cluster", session, addresses.join(","));
+    if (resp.result != 0) return resp;
+    var domains = resp.domains;
+    var ipByDomains = {};
+    for (i = 0, n = domains.length; i < n; i++) {
+        if (domains[i].domain) {
+            ipByDomains[domains[i].domain] = ipByDomains[domains[i].domain] || [];
+            ipByDomains[domains[i].domain].push(domains[i].ip);
+        }
+    }
+    resp = api.administration.cluster.SearchEnvs("cluster", session, {
+        status: 2
+    });
+    if (resp.result != 0) return resp;
+    var stoppedEnvs = resp.array;
+    var unusedIpByDomain = [];
+    var mail = [];
+    for (i = 0, n = stoppedEnvs.length; i < n; i++) {
+        if (ipByDomains[stoppedEnvs[i].domain]) {
+            var rep = api.billing.account.GetAccountsByUids("cluster", session, stoppedEnvs[i].uid)
+            var test = rep.accounts[0]
+            unusedIpByDomain.push({
+                envName: stoppedEnvs[i].domain,
+                appid: stoppedEnvs[i].appid,
+                uid: stoppedEnvs[i].uid,
+                mail: test.email,
+                ips: ipByDomains[stoppedEnvs[i].domain]
+            });  
+        }
+    }
+    
+    // get stop date for each environment
+    var dateFormat = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+    var lol = new java.text.SimpleDateFormat("yyyy-MM-dd");
+    var Currentseconds = new Date().getTime() / 1000;
+    for (i = 0, n = unusedIpByDomain.length; i < n; i++) { 
+        resp = toNative(new JSONObject(new Transport().post("http://" + window.location.host + "/1.0/administration/cluster/rest/getuseractivity", {
+            appid: "cluster", 
+            session: session,
+            uid: unusedIpByDomain[i].uid,
+            targetAppid: unusedIpByDomain[i].appid,
+            starttime: dateFormat.format(new Date(0)),
+            endtime: dateFormat.format(new Date()),
+            serviceName: "ControlService.StopEnv",
+            startRow: 0,
+            resultCount: 1
+        }, window.location.headers)));
+        if (resp.result == 0 && resp.array.length > 0) {
+            // unusedIpByDomain[i].stoppedAt = lol.format(new Date(resp.array[0].starttime));
+            unusedIpByDomain[i].stoppedAt = new Date(resp.array[0].starttime).getTime() / 1000;
+            
+            if ( unusedIpByDomain[i].stoppedAt <= Currentseconds - 1296000 ) {
+                  var content = 'Hello, We have detected the presence of IPv4 attached to an environment that has been off for more than 15 days' + unusedIpByDomain[i].envName +  '. These IPv4s are currently billed, we recommend that you remove these IPs so as not to be billed for this unused resource.';  
+                //jelastic.marketplace.console.WriteLog(unusedIpByDomain[i].stoppedAt + "nous sommes plus vieux que 15 jours");
+                // var message = api.message.email.SendToUser("cluster", session, unusedIpByDomain[i].mail, "IPv4 attached to a powered off environment", "Hello, We have detected the presence of IPv4 attached to an environment that has been off for more than 15 days unusedIpByDomain[i].envName . These IPv4s are currently billed, we recommend that you remove these IPs so as not to be billed for this unused resource.")
+                   var message = api.message.email.SendToUser("cluster", session, "axel.jacquet@infomaniak.com", "IPv4 attached to a powered off environment", content);
+
+            }
+        }
+    }
+       // var super = unusedIpByDomain[2].envName;
+       // var content = 'Hello, We have detected the presence of IPv4 attached to an environment that has been off for more than 15 days' + unusedIpByDomain[2].envName +  '. These IPv4s are currently billed, we recommend that you remove these IPs so as not to be billed for this unused resource.';  
+       // var message = api.message.email.SendToUser("cluster", session, "axel.jacquet@infomaniak.com", "IPv4 attached to a powered off environment", content);
+        
+        return {
+        result: 0,
+        envs: unusedIpByDomain,
+        mess: message
+    };
