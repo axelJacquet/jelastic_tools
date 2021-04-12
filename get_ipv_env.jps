@@ -1,4 +1,4 @@
-type: update
+type: install
 name: test
 onInstall:
 - script: |
