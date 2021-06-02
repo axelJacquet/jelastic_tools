@@ -72,7 +72,7 @@ onInstall:
                   var content = 'Hello, We have detected the presence of IPv4 attached to an environment that has been off for more than 15 days' + unusedIpByDomain[i].envName +  '. These IPv4s are currently billed, we recommend that you remove these IPs so as not to be billed for this unused resource.';  
                 //jelastic.marketplace.console.WriteLog(unusedIpByDomain[i].stoppedAt + "nous sommes plus vieux que 15 jours");
                 // var message = api.message.email.SendToUser("cluster", session, unusedIpByDomain[i].mail, "IPv4 attached to a powered off environment", "Hello, We have detected the presence of IPv4 attached to an environment that has been off for more than 15 days unusedIpByDomain[i].envName . These IPv4s are currently billed, we recommend that you remove these IPs so as not to be billed for this unused resource.")
-                   var message = api.message.email.SendToUser("cluster", session, "axel.jacquet@infomaniak.com", "IPv4 attached to a powered off environment", content);
+                   var message = api.message.email.SendToUser("cluster", session, "mail", "IPv4 attached to a powered off environment", content);
 
             }
         }
